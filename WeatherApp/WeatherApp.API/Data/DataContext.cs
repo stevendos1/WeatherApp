@@ -1,6 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using WeatherApp.Shared.Models; 
-using WeatherApp.Shared.Dtos;
+using WeatherApp.Shared.Models;
 
 namespace WeatherApp.API.Data
 {
@@ -18,7 +17,7 @@ namespace WeatherApp.API.Data
         public DbSet<SunInfo> SunInfos { get; set; }
         public DbSet<TemperatureDetails> TemperatureDetails { get; set; }
         public DbSet<Alert> Alerts { get; set; }
-        public DbSet<User> Users { get; set; }  // DbSet para la entidad de usuario
+        public DbSet<User> Users { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -77,6 +76,14 @@ namespace WeatherApp.API.Data
                 .WithOne(td => td.WeatherInfo)
                 .HasForeignKey<TemperatureDetails>(td => td.WeatherInfoId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Configuración de relaciones adicionales para User (si aplica)
+            // Ejemplo: Relacionar User con City
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.City)
+                .WithMany(c => c.Users)
+                .HasForeignKey(u => u.CityId)
+                .OnDelete(DeleteBehavior.SetNull); // En caso de que un usuario pueda no estar relacionado con una ciudad
         }
     }
 }

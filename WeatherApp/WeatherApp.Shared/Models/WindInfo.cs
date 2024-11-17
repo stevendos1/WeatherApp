@@ -1,6 +1,5 @@
 ﻿namespace WeatherApp.Shared.Models
 {
-
     using System.ComponentModel.DataAnnotations;
 
     public class WindInfo
