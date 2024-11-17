@@ -23,5 +23,8 @@
         public List<WeatherInfo> WeatherHistory { get; set; } = new List<WeatherInfo>();  // Relación uno a muchos con WeatherInfo
 
         public List<Alert> Alerts { get; set; } = new List<Alert>();  // Relación uno a muchos con Alert
+
+        // Relación uno a muchos con User
+        public List<User> Users { get; set; } = new List<User>();
     }
 }
