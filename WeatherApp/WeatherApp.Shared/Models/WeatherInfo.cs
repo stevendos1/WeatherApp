@@ -1,5 +1,6 @@
 ﻿namespace WeatherApp.Shared.Models
 {
+    using System;
     using System.ComponentModel.DataAnnotations;
 
     public class WeatherInfo
@@ -17,6 +18,9 @@
 
         [MaxLength(100)]
         public string Description { get; set; }  // Descripción del clima (ejemplo: "Soleado")
+
+        [Required]
+        public DateTime Date { get; set; }  // Fecha y hora del registro de clima
 
         public int CityId { get; set; }  // Relación muchos a uno con City
         public City City { get; set; }
