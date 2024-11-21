@@ -5,16 +5,36 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
+using WeatherApp.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configuración de Serilog
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console() // Logs en la consola
-    .WriteTo.File("logs/app-log.txt", rollingInterval: RollingInterval.Day) // Logs en archivo
+    .WriteTo.Console()
+    .WriteTo.File("logs/app-log.txt", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog(); // Reemplazar el proveedor de logging predeterminado por Serilog
+
+// Validación de configuraciones críticas
+var jwtSecretKey = builder.Configuration["JwtSettings:SecretKey"];
+if (string.IsNullOrEmpty(jwtSecretKey))
+{
+    throw new InvalidOperationException("El SecretKey no está configurado en appsettings.json.");
+}
+
+var weatherApiBaseUrl = builder.Configuration["WeatherApi:BaseUrl"];
+if (string.IsNullOrEmpty(weatherApiBaseUrl))
+{
+    throw new InvalidOperationException("La BaseUrl para WeatherApi no está configurada en appsettings.json.");
+}
+
+var weatherApiKey = builder.Configuration["WeatherApi:ApiKey"];
+if (string.IsNullOrEmpty(weatherApiKey))
+{
+    throw new InvalidOperationException("La ApiKey para WeatherApi no está configurada en appsettings.json.");
+}
 
 // Configuración de autenticación y JWT
 builder.Services.AddAuthentication(options =>
@@ -24,16 +44,15 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    var key = builder.Configuration["JwtSettings:SecretKey"] ?? "YourFallbackSuperSecretKey";
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = "WeatherApp",
-        ValidAudience = "WeatherAppUsers",
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+        ValidIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "WeatherApp",
+        ValidAudience = builder.Configuration["JwtSettings:Audience"] ?? "WeatherAppUsers",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
         RoleClaimType = ClaimTypes.Role
     };
 });
@@ -44,6 +63,22 @@ builder.Services.AddDbContext<DataContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sqlOptions => sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)
     ));
+
+// Configurar cliente HTTP para la integración con OpenWeather
+builder.Services.AddHttpClient("WeatherApi", client =>
+{
+    client.BaseAddress = new Uri(weatherApiBaseUrl);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("User-Agent", "WeatherApp-Client");
+});
+
+// Configuración para prevenir ciclos JSON
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
 
 // Configuración de Swagger
 builder.Services.AddSwaggerGen(c =>
@@ -74,8 +109,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddTransient<WeatherApiService>(); // Registrar el servicio para manejar la API de clima
 
 var app = builder.Build();
 
@@ -86,6 +121,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<DataContext>();
+        await context.Database.MigrateAsync(); // Aplicar migraciones pendientes
         DataSeeder.SeedDatabase(services);
     }
     catch (Exception ex)

@@ -32,7 +32,8 @@ namespace WeatherApp.API.Controllers
                     Id = u.Id,
                     Username = u.Username,
                     Email = u.Email,
-                    Role = u.Role
+                    Role = u.Role,
+                    IsActive = u.IsActive
                 })
                 .ToListAsync();
 
@@ -51,7 +52,8 @@ namespace WeatherApp.API.Controllers
                     Id = u.Id,
                     Username = u.Username,
                     Email = u.Email,
-                    Role = u.Role
+                    Role = u.Role,
+                    IsActive = u.IsActive
                 })
                 .FirstOrDefaultAsync();
 
@@ -80,7 +82,9 @@ namespace WeatherApp.API.Controllers
                 Username = userDto.Username,
                 Email = userDto.Email,
                 PasswordHash = HashPassword(userDto.Password),
-                Role = userDto.Role
+                Role = userDto.Role,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.Users.Add(user);
@@ -91,7 +95,8 @@ namespace WeatherApp.API.Controllers
                 Id = user.Id,
                 Username = user.Username,
                 Email = user.Email,
-                Role = user.Role
+                Role = user.Role,
+                IsActive = user.IsActive
             });
         }
 
@@ -134,6 +139,59 @@ namespace WeatherApp.API.Controllers
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // PUT: api/Users/{id}/ChangeRole
+        [HttpPut("{id}/ChangeRole")]
+        [Authorize(Roles = "Admin")] // Solo administradores pueden cambiar el rol
+        public async Task<IActionResult> ChangeRole(int id, [FromBody] string newRole)
+        {
+            if (newRole != "Admin" && newRole != "User")
+                return BadRequest("Rol inválido. Los roles permitidos son 'Admin' y 'User'.");
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound("Usuario no encontrado");
+
+            user.Role = newRole;
+            await _context.SaveChangesAsync();
+
+            return Ok($"Rol del usuario cambiado a {newRole}.");
+        }
+
+        // PUT: api/Users/{id}/ToggleActive
+        [HttpPut("{id}/ToggleActive")]
+        [Authorize(Roles = "Admin")] // Solo administradores pueden activar/desactivar usuarios
+        public async Task<IActionResult> ToggleActive(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound("Usuario no encontrado");
+
+            user.IsActive = !user.IsActive;
+            await _context.SaveChangesAsync();
+
+            return Ok($"Estado del usuario cambiado a {(user.IsActive ? "Activo" : "Inactivo")}.");
+        }
+
+        // GET: api/Users/Search
+        [HttpGet("Search")]
+        [Authorize(Roles = "Admin")] // Solo administradores pueden buscar usuarios
+        public async Task<IActionResult> Search([FromQuery] string query)
+        {
+            var users = await _context.Users
+                .Where(u => u.Username.Contains(query) || u.Email.Contains(query))
+                .Select(u => new UserDto
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    Email = u.Email,
+                    Role = u.Role,
+                    IsActive = u.IsActive
+                })
+                .ToListAsync();
+
+            return Ok(users);
         }
 
         private string HashPassword(string password)
