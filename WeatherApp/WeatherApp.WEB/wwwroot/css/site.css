@@ -1,0 +1,42 @@
+﻿/* wwwroot/css/site.css */
+
+/* Encabezados de Dashboard */
+.dashboard-header {
+    font-size: 1.8rem;
+    margin-bottom: 20px;
+    color: #343a40;
+}
+
+/* Tarjetas de Funcionalidad */
+.feature-card {
+    padding: 20px;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    text-align: center;
+    transition: box-shadow 0.3s ease;
+    background-color: #ffffff;
+}
+
+    .feature-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+/* Iconos Grandes */
+.icon-large {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    color: #007bff;
+}
+
+/* Botones de Acción */
+.btn-action {
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    transition: background-color 0.3s, transform 0.2s;
+}
+
+    .btn-action:hover {
+        background-color: #0056b3;
+        transform: translateY(-2px);
+    }

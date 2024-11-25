@@ -1,0 +1,200 @@
+﻿@page "/statistics"
+@using System.Net.Http.Json
+@using WeatherApp.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+
+@attribute [Authorize(Roles = "Admin,User")]
+
+<style>
+    .statistics-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 40px auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .form-section {
+        margin-bottom: 40px;
+        padding: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+
+        .form-section h4 {
+            margin-bottom: 20px;
+        }
+
+    .btn-space {
+        margin-right: 10px;
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 0.875rem;
+    }
+
+    .api-errors {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="statistics-container">
+    <button class="btn btn-secondary mb-4" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    <h3 class="mb-4">Estadísticas del Clima</h3>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="form-section">
+        <h4>Consultar Estadísticas</h4>
+        <EditForm Model="statisticsRequest" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label for="cityId" class="form-label">ID de la Ciudad</label>
+                <InputNumber id="cityId" class="form-control" @bind-Value="statisticsRequest.CityId" />
+                <ValidationMessage For="@(() => statisticsRequest.CityId)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="startDate" class="form-label">Fecha de Inicio</label>
+                <InputDate id="startDate" class="form-control" @bind-Value="statisticsRequest.StartDate" />
+                <ValidationMessage For="@(() => statisticsRequest.StartDate)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="endDate" class="form-label">Fecha de Fin</label>
+                <InputDate id="endDate" class="form-control" @bind-Value="statisticsRequest.EndDate" />
+                <ValidationMessage For="@(() => statisticsRequest.EndDate)" />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Consultar</button>
+        </EditForm>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-spinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (weatherStatistics != null)
+    {
+        <div class="form-section">
+            <h4>Resultados</h4>
+            <p><strong>Temperatura Promedio:</strong> @weatherStatistics.AvgTemperature °C</p>
+            <p><strong>Humedad Promedio:</strong> @weatherStatistics.AvgHumidity %</p>
+            <p><strong>Viento Predominante:</strong> @weatherStatistics.PredominantWind °</p>
+        </div>
+    }
+</div>
+
+@code {
+    private StatisticsRequest statisticsRequest = new();
+    private WeatherStatistics weatherStatistics;
+    private string successMessage;
+    private string errorMessage;
+    private bool isLoading = false;
+
+    private async Task HandleValidSubmit()
+    {
+        isLoading = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+        weatherStatistics = null;
+
+        try
+        {
+            string startDate = statisticsRequest.StartDate.HasValue ? Uri.EscapeDataString(statisticsRequest.StartDate.Value.ToString("o")) : string.Empty;
+            string endDate = statisticsRequest.EndDate.HasValue ? Uri.EscapeDataString(statisticsRequest.EndDate.Value.ToString("o")) : string.Empty;
+
+            string url = $"api/Statistics/City/{statisticsRequest.CityId}/Statistics";
+
+            if (statisticsRequest.StartDate.HasValue || statisticsRequest.EndDate.HasValue)
+            {
+                url += "?";
+                if (statisticsRequest.StartDate.HasValue)
+                {
+                    url += $"startDate={startDate}&";
+                }
+                if (statisticsRequest.EndDate.HasValue)
+                {
+                    url += $"endDate={endDate}";
+                }
+
+                url = url.TrimEnd('&');
+            }
+
+            var response = await Http.GetFromJsonAsync<WeatherStatistics>(url);
+
+            if (response != null)
+            {
+                weatherStatistics = response;
+                successMessage = "Estadísticas obtenidas exitosamente.";
+            }
+            else
+            {
+                errorMessage = "No se encontraron estadísticas.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener estadísticas: {ex.Message}");
+            errorMessage = "Error al obtener las estadísticas.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    public class StatisticsRequest
+    {
+        public int CityId { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+    }
+
+    public class WeatherStatistics
+    {
+        public double AvgTemperature { get; set; }
+        public double AvgHumidity { get; set; }
+        public double PredominantWind { get; set; }
+    }
+}

@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using WeatherApp.API.Data;
 using WeatherApp.Shared.Models;
 using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using WeatherApp.Shared.Dtos;
 
 namespace WeatherApp.API.Controllers
 {
@@ -17,19 +19,21 @@ namespace WeatherApp.API.Controllers
             _context = context;
         }
 
+        /// <summary>
+        /// Obtiene todas las coordenadas almacenadas.
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetCoordinates()
         {
-            var coordinates = await _context.Coordinates.ToListAsync();
-            return Ok(coordinates);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> AddCoordinates([FromBody] Coordinates coordinates)
-        {
-            _context.Coordinates.Add(coordinates);
-            await _context.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetCoordinates), new { id = coordinates.Id }, coordinates);
+            try
+            {
+                var coordinates = await _context.Coordinates.ToListAsync();
+                return Ok(coordinates);
+            }
+            catch
+            {
+                return StatusCode(500, "Error al obtener las coordenadas.");
+            }
         }
     }
 }

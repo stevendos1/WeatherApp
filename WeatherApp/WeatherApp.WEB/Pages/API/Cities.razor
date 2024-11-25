@@ -1,0 +1,414 @@
+﻿@page "/cities"
+@using WeatherApp.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+
+@attribute [Authorize(Roles = "Admin,User")]
+
+<style>
+    .cities-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 40px auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    .form-section {
+        margin-bottom: 40px;
+        padding: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+
+        .form-section h4 {
+            margin-bottom: 20px;
+        }
+
+    .btn-space {
+        margin-right: 10px;
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 0.875rem;
+    }
+
+    .api-errors {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="cities-container">
+    <button class="btn btn-secondary mb-4" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    <h3 class="mb-4">Gestión de Ciudades</h3>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (apiErrors != null && apiErrors.Any())
+    {
+        <div class="alert alert-danger api-errors" role="alert">
+            <ul>
+                @foreach (var error in apiErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (isAdmin)
+    {
+        <div class="form-section">
+            <h4>Crear Nueva Ciudad</h4>
+            <EditForm Model="newCity" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="name" class="form-label">Nombre</label>
+                    <InputText id="name" class="form-control" @bind-Value="newCity.Name" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="country" class="form-label">País</label>
+                    <InputText id="country" class="form-control" @bind-Value="newCity.Country" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="latitude" class="form-label">Latitud</label>
+                    <InputNumber id="latitude" class="form-control" @bind-Value="newCity.Latitude" />
+                    <ValidationMessage For="@(() => newCity.Latitude)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="longitude" class="form-label">Longitud</label>
+                    <InputNumber id="longitude" class="form-control" @bind-Value="newCity.Longitude" />
+                    <ValidationMessage For="@(() => newCity.Longitude)" />
+                </div>
+
+                <button type="submit" class="btn btn-primary">Crear</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="ResetNewCity">Cancelar</button>
+            </EditForm>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (isLoading)
+        {
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        }
+        else if (cities == null || !cities.Any())
+        {
+            <div class="alert alert-info" role="alert">
+                No hay ciudades disponibles.
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>País</th>
+                        <th>Latitud</th>
+                        <th>Longitud</th>
+                        @if (isAdmin)
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var city in cities)
+                    {
+                        <tr>
+                            <td>@city.Name</td>
+                            <td>@city.Country</td>
+                            <td>@city.Coordinates.Latitude</td>
+                            <td>@city.Coordinates.Longitude</td>
+                            @if (isAdmin)
+                            {
+                                <td>
+                                    <button class="btn btn-warning btn-sm btn-space" @onclick="() => StartEditCity(city)">Editar</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteCity(city.Id)">Eliminar</button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (isAdmin && editingCity != null)
+    {
+        <div class="form-section">
+            <h4>Editar Ciudad</h4>
+            <EditForm Model="editingCity" OnValidSubmit="HandleValidSubmitEdit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="editName" class="form-label">Nombre</label>
+                    <InputText id="editName" class="form-control" @bind-Value="editingCity.Name" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editCountry" class="form-label">País</label>
+                    <InputText id="editCountry" class="form-control" @bind-Value="editingCity.Country" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editLatitude" class="form-label">Latitud</label>
+                    <InputNumber id="editLatitude" class="form-control" @bind-Value="editingCity.Latitude" />
+                    <ValidationMessage For="@(() => editingCity.Latitude)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editLongitude" class="form-label">Longitud</label>
+                    <InputNumber id="editLongitude" class="form-control" @bind-Value="editingCity.Longitude" />
+                    <ValidationMessage For="@(() => editingCity.Longitude)" />
+                </div>
+
+                <button type="submit" class="btn btn-success">Actualizar</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="CancelEdit">Cancelar</button>
+            </EditForm>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CityDto> cities = new();
+    private bool isAdmin = false;
+    private bool isLoading = true;
+
+    private CreateCityDto newCity = new();
+    private UpdateCityDto editingCity = null;
+
+    private string successMessage;
+    private string errorMessage;
+    private List<string> apiErrors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            isAdmin = user.IsInRole("Admin");
+        }
+
+        await FetchCities();
+        ResetNewCity(); // Inicializar la fecha de newCity al cargar la página
+    }
+
+    private async Task FetchCities()
+    {
+        try
+        {
+            cities = await Http.GetFromJsonAsync<List<CityDto>>("api/Cities");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener ciudades: {ex.Message}");
+            errorMessage = "Error al cargar las ciudades.";
+            successMessage = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        apiErrors.Clear();
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/Cities", newCity);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Ciudad creada exitosamente.";
+                errorMessage = null;
+                ResetNewCity(); // Restablecer newCity después de crear la ciudad
+                await FetchCities();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                if (errorResponse != null && errorResponse.Errors != null)
+                {
+                    apiErrors.AddRange(errorResponse.Errors);
+                }
+                else
+                {
+                    errorMessage = "Error al crear la ciudad.";
+                }
+                successMessage = null;
+            }
+            else
+            {
+                var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Error al crear la ciudad: {errorMessageResponse}";
+                successMessage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al crear ciudad: {ex.Message}");
+            errorMessage = "Error al crear la ciudad.";
+            successMessage = null;
+        }
+    }
+
+    private void ResetNewCity()
+    {
+        newCity = new CreateCityDto();
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private void StartEditCity(CityDto city)
+    {
+        editingCity = new UpdateCityDto
+            {
+                Id = city.Id,
+                Name = city.Name,
+                Country = city.Country,
+                Latitude = city.Coordinates.Latitude,
+                Longitude = city.Coordinates.Longitude
+            };
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private async Task HandleValidSubmitEdit()
+    {
+        apiErrors.Clear();
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/Cities/{editingCity.Id}", editingCity);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Ciudad actualizada exitosamente.";
+                errorMessage = null;
+                editingCity = null;
+                await FetchCities();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                if (errorResponse != null && errorResponse.Errors != null)
+                {
+                    apiErrors.AddRange(errorResponse.Errors);
+                }
+                else
+                {
+                    errorMessage = "Error al actualizar la ciudad.";
+                }
+                successMessage = null;
+            }
+            else
+            {
+                var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Error al actualizar la ciudad: {errorMessageResponse}";
+                successMessage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al actualizar ciudad: {ex.Message}");
+            errorMessage = "Error al actualizar la ciudad.";
+            successMessage = null;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingCity = null;
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private async Task DeleteCity(int id)
+    {
+        bool confirm = await JsRuntime.InvokeAsync<bool>("confirm", "¿Estás seguro de que deseas eliminar esta ciudad?");
+        if (confirm)
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/Cities/{id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    successMessage = "Ciudad eliminada correctamente.";
+                    errorMessage = null;
+                    cities.RemoveAll(c => c.Id == id);
+                    StateHasChanged();
+                }
+                else
+                {
+                    var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                    errorMessage = $"Error al eliminar la ciudad: {errorMessageResponse}";
+                    successMessage = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error al eliminar ciudad: {ex.Message}");
+                errorMessage = "Error al eliminar la ciudad.";
+                successMessage = null;
+            }
+        }
+    }
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    public class ErrorResponse
+    {
+        public List<string> Errors { get; set; }
+    }
+}
+

@@ -5,17 +5,19 @@
     public class Forecast
     {
         [Key]
-        public int Id { get; set; }  // Identificador único del pronóstico
+        public int Id { get; set; }  // Unique identifier
 
         [Required]
-        public DateTime Date { get; set; }  // Fecha y hora del pronóstico
+        public DateTime Date { get; set; }  // Forecast date and time
 
         [Required]
-        public double Temperature { get; set; }  // Temperatura pronosticada
+        public double Temperature { get; set; }  // Forecasted temperature
 
-        public double Humidity { get; set; }  // Humedad pronosticada
+        public double Humidity { get; set; }  // Forecasted humidity
 
-        public int CityId { get; set; }  // Relación muchos a uno con City
-        public City City { get; set; }
+        [Required]
+        public int CityId { get; set; }  // Foreign key to City
+
+        public City? City { get; set; }  // Make City nullable
     }
 }

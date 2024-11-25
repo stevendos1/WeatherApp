@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
 using WeatherApp.API.Services;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -72,13 +73,27 @@ builder.Services.AddHttpClient("WeatherApi", client =>
     client.DefaultRequestHeaders.Add("User-Agent", "WeatherApp-Client");
 });
 
-// Configuración para prevenir ciclos JSON
+// Configuración para prevenir ciclos JSON y ignorar propiedades nulas
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
+
+// Configuración de CORS para permitir solicitudes desde la aplicación web
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowWebApp",
+        policy =>
+        {
+            policy.WithOrigins("https://localhost:7165") // Solo HTTPS
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials(); // Permitir credenciales (cookies)
+        });
+});
 
 // Configuración de Swagger
 builder.Services.AddSwaggerGen(c =>
@@ -139,6 +154,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Usar CORS
+app.UseCors("AllowWebApp");
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -26,54 +26,61 @@ namespace WeatherApp.API.Controllers
             if (id <= 0)
                 return BadRequest("El ID de la ciudad debe ser mayor a 0.");
 
-            var city = await _context.Cities
-                .Include(c => c.Coordinates)
-                .Include(c => c.WeatherHistory)
-                .Include(c => c.Forecasts)
-                .Include(c => c.Alerts)
-                .Where(c => c.Id == id)
-                .Select(c => new CityDto
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    Country = c.Country,
-                    Coordinates = c.Coordinates != null
-                        ? new CoordinatesDto
+            try
+            {
+                var city = await _context.Cities
+                    .Include(c => c.Coordinates)
+                    .Include(c => c.WeatherHistory)
+                    .Include(c => c.Forecasts)
+                    .Include(c => c.Alerts)
+                    .Where(c => c.Id == id)
+                    .Select(c => new CityDto
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        Country = c.Country,
+                        Coordinates = c.Coordinates != null
+                            ? new CoordinatesDto
+                            {
+                                Id = c.Coordinates.Id,
+                                Latitude = c.Coordinates.Latitude,
+                                Longitude = c.Coordinates.Longitude
+                            }
+                            : null,
+                        WeatherHistory = c.WeatherHistory.Select(w => new WeatherInfoDto
                         {
-                            Id = c.Coordinates.Id,
-                            Latitude = c.Coordinates.Latitude,
-                            Longitude = c.Coordinates.Longitude
-                        }
-                        : null,
-                    WeatherHistory = c.WeatherHistory.Select(w => new WeatherInfoDto
-                    {
-                        Id = w.Id,
-                        Temperature = w.Temperature,
-                        Humidity = w.Humidity,
-                        Pressure = w.Pressure,
-                        Description = w.Description
-                    }).ToList(),
-                    Forecasts = c.Forecasts.Select(f => new ForecastDto
-                    {
-                        Id = f.Id,
-                        Date = f.Date,
-                        Temperature = f.Temperature,
-                        Humidity = f.Humidity
-                    }).ToList(),
-                    Alerts = c.Alerts.Select(a => new AlertDto
-                    {
-                        Id = a.Id,
-                        Title = a.Title,
-                        Description = a.Description,
-                        Date = a.Date
-                    }).ToList()
-                })
-                .FirstOrDefaultAsync();
+                            Id = w.Id,
+                            Temperature = w.Temperature,
+                            Humidity = w.Humidity,
+                            Pressure = w.Pressure,
+                            Description = w.Description
+                        }).ToList(),
+                        Forecasts = c.Forecasts.Select(f => new ForecastDto
+                        {
+                            Id = f.Id,
+                            Date = f.Date,
+                            Temperature = f.Temperature,
+                            Humidity = f.Humidity
+                        }).ToList(),
+                        Alerts = c.Alerts.Select(a => new AlertDto
+                        {
+                            Id = a.Id,
+                            Title = a.Title,
+                            Description = a.Description,
+                            Date = a.Date
+                        }).ToList()
+                    })
+                    .FirstOrDefaultAsync();
 
-            if (city == null)
-                return NotFound("Ciudad no encontrada.");
+                if (city == null)
+                    return NotFound("Ciudad no encontrada.");
 
-            return Ok(city);
+                return Ok(city);
+            }
+            catch
+            {
+                return StatusCode(500, "Error al procesar la solicitud.");
+            }
         }
 
         /// <summary>
@@ -82,36 +89,43 @@ namespace WeatherApp.API.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateCity([FromBody] CreateCityDto createCityDto)
         {
-            if (createCityDto == null)
-                return BadRequest("Los datos de la ciudad son requeridos.");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            var coordinates = new Coordinates
+            try
             {
-                Latitude = createCityDto.Latitude,
-                Longitude = createCityDto.Longitude
-            };
-
-            var city = new City
-            {
-                Name = createCityDto.Name,
-                Country = createCityDto.Country,
-                Coordinates = coordinates
-            };
-
-            _context.Cities.Add(city);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetCityById), new { id = city.Id }, new CityDto
-            {
-                Id = city.Id,
-                Name = city.Name,
-                Country = city.Country,
-                Coordinates = new CoordinatesDto
+                var coordinates = new Coordinates
                 {
-                    Latitude = city.Coordinates.Latitude,
-                    Longitude = city.Coordinates.Longitude
-                }
-            });
+                    Latitude = createCityDto.Latitude,
+                    Longitude = createCityDto.Longitude
+                };
+
+                var city = new City
+                {
+                    Name = createCityDto.Name,
+                    Country = createCityDto.Country,
+                    Coordinates = coordinates
+                };
+
+                _context.Cities.Add(city);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(nameof(GetCityById), new { id = city.Id }, new CityDto
+                {
+                    Id = city.Id,
+                    Name = city.Name,
+                    Country = city.Country,
+                    Coordinates = new CoordinatesDto
+                    {
+                        Latitude = city.Coordinates.Latitude,
+                        Longitude = city.Coordinates.Longitude
+                    }
+                });
+            }
+            catch
+            {
+                return StatusCode(500, "Error al crear la ciudad.");
+            }
         }
 
         /// <summary>
@@ -120,22 +134,29 @@ namespace WeatherApp.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllCities()
         {
-            var cities = await _context.Cities
-                .Include(c => c.Coordinates)
-                .Select(c => new CityDto
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    Country = c.Country,
-                    Coordinates = new CoordinatesDto
+            try
+            {
+                var cities = await _context.Cities
+                    .Include(c => c.Coordinates)
+                    .Select(c => new CityDto
                     {
-                        Latitude = c.Coordinates.Latitude,
-                        Longitude = c.Coordinates.Longitude
-                    }
-                })
-                .ToListAsync();
+                        Id = c.Id,
+                        Name = c.Name,
+                        Country = c.Country,
+                        Coordinates = new CoordinatesDto
+                        {
+                            Latitude = c.Coordinates.Latitude,
+                            Longitude = c.Coordinates.Longitude
+                        }
+                    })
+                    .ToListAsync();
 
-            return Ok(cities);
+                return Ok(cities);
+            }
+            catch
+            {
+                return StatusCode(500, "Error al obtener la lista de ciudades.");
+            }
         }
 
         /// <summary>
@@ -144,25 +165,67 @@ namespace WeatherApp.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCity(int id, [FromBody] UpdateCityDto updateCityDto)
         {
-            if (updateCityDto == null)
-                return BadRequest("Los datos de la ciudad son requeridos.");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
             if (id != updateCityDto.Id)
                 return BadRequest("El ID proporcionado no coincide.");
 
-            var city = await _context.Cities.Include(c => c.Coordinates).FirstOrDefaultAsync(c => c.Id == id);
+            try
+            {
+                var city = await _context.Cities.Include(c => c.Coordinates).FirstOrDefaultAsync(c => c.Id == id);
 
-            if (city == null)
-                return NotFound("Ciudad no encontrada.");
+                if (city == null)
+                    return NotFound("Ciudad no encontrada.");
 
-            city.Name = updateCityDto.Name;
-            city.Country = updateCityDto.Country;
-            city.Coordinates.Latitude = updateCityDto.Latitude;
-            city.Coordinates.Longitude = updateCityDto.Longitude;
+                city.Name = updateCityDto.Name;
+                city.Country = updateCityDto.Country;
+                city.Coordinates.Latitude = updateCityDto.Latitude;
+                city.Coordinates.Longitude = updateCityDto.Longitude;
 
-            await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
 
-            return NoContent();
+                var updatedCityDto = new CityDto
+                {
+                    Id = city.Id,
+                    Name = city.Name,
+                    Country = city.Country,
+                    Coordinates = new CoordinatesDto
+                    {
+                        Id = city.Coordinates.Id,
+                        Latitude = city.Coordinates.Latitude,
+                        Longitude = city.Coordinates.Longitude
+                    },
+                    WeatherHistory = city.WeatherHistory.Select(w => new WeatherInfoDto
+                    {
+                        Id = w.Id,
+                        Temperature = w.Temperature,
+                        Humidity = w.Humidity,
+                        Pressure = w.Pressure,
+                        Description = w.Description
+                    }).ToList(),
+                    Forecasts = city.Forecasts.Select(f => new ForecastDto
+                    {
+                        Id = f.Id,
+                        Date = f.Date,
+                        Temperature = f.Temperature,
+                        Humidity = f.Humidity
+                    }).ToList(),
+                    Alerts = city.Alerts.Select(a => new AlertDto
+                    {
+                        Id = a.Id,
+                        Title = a.Title,
+                        Description = a.Description,
+                        Date = a.Date
+                    }).ToList()
+                };
+
+                return Ok(updatedCityDto); // Devolver el objeto actualizado con un código de estado 200
+            }
+            catch
+            {
+                return StatusCode(500, "Error al actualizar la ciudad.");
+            }
         }
 
         /// <summary>
@@ -171,15 +234,22 @@ namespace WeatherApp.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCity(int id)
         {
-            var city = await _context.Cities.Include(c => c.Coordinates).FirstOrDefaultAsync(c => c.Id == id);
+            try
+            {
+                var city = await _context.Cities.Include(c => c.Coordinates).FirstOrDefaultAsync(c => c.Id == id);
 
-            if (city == null)
-                return NotFound("Ciudad no encontrada.");
+                if (city == null)
+                    return NotFound("Ciudad no encontrada.");
 
-            _context.Cities.Remove(city);
-            await _context.SaveChangesAsync();
+                _context.Cities.Remove(city);
+                await _context.SaveChangesAsync();
 
-            return NoContent();
+                return NoContent();
+            }
+            catch
+            {
+                return StatusCode(500, "Error al eliminar la ciudad.");
+            }
         }
     }
 }

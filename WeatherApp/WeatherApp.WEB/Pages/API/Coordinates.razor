@@ -1,0 +1,166 @@
+﻿@page "/coordinates"
+@using WeatherApp.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+
+@attribute [Authorize(Roles = "Admin,User")]
+
+<style>
+    .coordinates-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 40px auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 0.875rem;
+    }
+
+    .api-errors {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="coordinates-container">
+    <button class="btn btn-secondary mb-4" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    <h3 class="mb-4">Gestión de Coordenadas</h3>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (apiErrors != null && apiErrors.Any())
+    {
+        <div class="alert alert-danger api-errors" role="alert">
+            <ul>
+                @foreach (var error in apiErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (isLoading)
+        {
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        }
+        else if (coordinateList == null || !coordinateList.Any())
+        {
+            <div class="alert alert-info" role="alert">
+                No hay coordenadas disponibles.
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover">
+                <thead class="table-primary">
+                    <tr>
+                        <th>ID</th>
+                        <th>Latitud</th>
+                        <th>Longitud</th>
+                        <th>ID de la Ciudad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var coordinate in coordinateList)
+                    {
+                        <tr>
+                            <td>@coordinate.Id</td>
+                            <td>@coordinate.Latitude</td>
+                            <td>@coordinate.Longitude</td>
+                            <td>@coordinate.CityId</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<CoordinatesDto> coordinateList = new();
+    private bool isAdmin = false;
+    private bool isLoading = true;
+
+    private string successMessage;
+    private string errorMessage;
+    private List<string> apiErrors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            isAdmin = user.IsInRole("Admin");
+        }
+
+        await FetchCoordinates();
+    }
+
+    private async Task FetchCoordinates()
+    {
+        try
+        {
+            coordinateList = await Http.GetFromJsonAsync<List<CoordinatesDto>>("api/Coordinates");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener coordenadas: {ex.Message}");
+            errorMessage = "Error al cargar las coordenadas.";
+            successMessage = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    public class ErrorResponse
+    {
+        public List<string> Errors { get; set; }
+    }
+}
