@@ -1,0 +1,464 @@
+﻿@page "/alerts"
+@using WeatherApp.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+
+@attribute [Authorize(Roles = "Admin,User")]
+
+<style>
+    .alerts-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 40px auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    .form-section {
+        margin-bottom: 40px;
+        padding: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+
+        .form-section h4 {
+            margin-bottom: 20px;
+        }
+
+    .btn-space {
+        margin-right: 10px;
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 0.875rem;
+    }
+
+    .api-errors {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="alerts-container">
+    <button class="btn btn-secondary mb-4" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    <h3 class="mb-4">Gestión de Alertas</h3>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (apiErrors != null && apiErrors.Any())
+    {
+        <div class="alert alert-danger api-errors" role="alert">
+            <ul>
+                @foreach (var error in apiErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (isAdmin)
+    {
+        <div class="form-section">
+            <h4>Crear Nueva Alerta</h4>
+            <EditForm Model="newAlert" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="title" class="form-label">Título</label>
+                    <InputText id="title" class="form-control" @bind-Value="newAlert.Title" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">Descripción</label>
+                    <InputTextArea id="description" class="form-control" @bind-Value="newAlert.Description" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="date" class="form-label">Fecha</label>
+                    <InputDate id="date" class="form-control" @bind-Value="newAlert.Date" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="cityId" class="form-label">Ciudad</label>
+                    <InputSelect id="cityId" class="form-control" @bind-Value="newAlert.CityId">
+                        <option value="">-- Seleccione una Ciudad --</option>
+                        @foreach (var city in cities)
+                        {
+                            <option value="@city.Id">@city.Name (@city.Country)</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Crear</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="ResetNewAlert">Cancelar</button>
+            </EditForm>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (isLoading)
+        {
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        }
+        else if (alerts == null || !alerts.Any())
+        {
+            <div class="alert alert-info" role="alert">
+                No hay alertas disponibles.
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Título</th>
+                        <th>Descripción</th>
+                        <th>Fecha</th>
+                        <th>Ciudad</th>
+                        @if (isAdmin)
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var alert in alerts)
+                    {
+                        <tr>
+                            <td>@alert.Title</td>
+                            <td>@alert.Description</td>
+                            <td>@alert.Date.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@alert.City.Name (@alert.City.Country)</td>
+                            @if (isAdmin)
+                            {
+                                <td>
+                                    <button class="btn btn-warning btn-sm btn-space" @onclick="() => StartEditAlert(alert)">Editar</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteAlert(alert.Id)">Eliminar</button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (isAdmin && editingAlert != null)
+    {
+        <div class="form-section">
+            <h4>Editar Alerta</h4>
+            <EditForm Model="editingAlert" OnValidSubmit="HandleValidSubmitEdit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="editTitle" class="form-label">Título</label>
+                    <InputText id="editTitle" class="form-control" @bind-Value="editingAlert.Title" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editDescription" class="form-label">Descripción</label>
+                    <InputTextArea id="editDescription" class="form-control" @bind-Value="editingAlert.Description" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editDate" class="form-label">Fecha</label>
+                    <InputDate id="editDate" class="form-control" @bind-Value="editingAlert.Date" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="editCityId" class="form-label">Ciudad</label>
+                    <InputSelect id="editCityId" class="form-control" @bind-Value="editingAlert.CityId">
+                        <option value="">-- Seleccione una Ciudad --</option>
+                        @foreach (var city in cities)
+                        {
+                            <option value="@city.Id">@city.Name (@city.Country)</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <button type="submit" class="btn btn-success">Actualizar</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="CancelEdit">Cancelar</button>
+            </EditForm>
+        </div>
+    }
+</div>
+
+@code {
+    private List<AlertDto> alerts = new();
+    private List<CityDto> cities = new();
+    private bool isAdmin = false;
+    private bool isLoading = true;
+
+    private AlertDto newAlert = new();
+    private AlertDto editingAlert = null;
+
+    private string successMessage;
+    private string errorMessage;
+    private List<string> apiErrors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            isAdmin = user.IsInRole("Admin");
+        }
+
+        await LoadCities();
+        await FetchAlerts();
+        ResetNewAlert(); // Inicializar la fecha de newAlert al cargar la página
+    }
+
+    private async Task LoadCities()
+    {
+        try
+        {
+            cities = await Http.GetFromJsonAsync<List<CityDto>>("api/Cities");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener ciudades: {ex.Message}");
+            errorMessage = "Error al cargar las ciudades.";
+            successMessage = null;
+        }
+    }
+
+    private async Task FetchAlerts()
+    {
+        try
+        {
+            alerts = await Http.GetFromJsonAsync<List<AlertDto>>("api/Alerts");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener alertas: {ex.Message}");
+            errorMessage = "Error al cargar las alertas.";
+            successMessage = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        apiErrors.Clear();
+        try
+        {
+            // Inicializar la propiedad City de newAlert
+            newAlert.City = new CityDto
+                {
+                    Id = newAlert.CityId,
+                    Name = cities.FirstOrDefault(c => c.Id == newAlert.CityId)?.Name,
+                    Country = cities.FirstOrDefault(c => c.Id == newAlert.CityId)?.Country,
+                    Coordinates = cities.FirstOrDefault(c => c.Id == newAlert.CityId)?.Coordinates,
+                    WeatherHistory = new List<WeatherInfoDto>(),
+                    Forecasts = new List<ForecastDto>(),
+                    Alerts = new List<AlertDto>()
+                };
+
+            var response = await Http.PostAsJsonAsync("api/Alerts", newAlert);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Alerta creada exitosamente.";
+                errorMessage = null;
+                ResetNewAlert(); // Restablecer newAlert después de crear la alerta
+                await FetchAlerts();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                if (errorResponse != null && errorResponse.Errors != null)
+                {
+                    apiErrors.AddRange(errorResponse.Errors);
+                }
+                else
+                {
+                    errorMessage = "Error al crear la alerta.";
+                }
+                successMessage = null;
+            }
+            else
+            {
+                var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Error al crear la alerta: {errorMessageResponse}";
+                successMessage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al crear alerta: {ex.Message}");
+            errorMessage = "Error al crear la alerta.";
+            successMessage = null;
+        }
+    }
+
+    private void ResetNewAlert()
+    {
+        newAlert = new AlertDto
+            {
+                Date = DateTime.Now // Establecer la fecha al día actual con hora
+            };
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private void StartEditAlert(AlertDto alert)
+    {
+        editingAlert = new AlertDto
+            {
+                Id = alert.Id,
+                Title = alert.Title,
+                Description = alert.Description,
+                Date = alert.Date, // Mantener la fecha completa con hora
+                CityId = alert.CityId,
+                City = new CityDto
+                {
+                    Id = alert.City.Id,
+                    Name = alert.City.Name,
+                    Country = alert.City.Country,
+                    Coordinates = alert.City.Coordinates,
+                    WeatherHistory = alert.City.WeatherHistory ?? new List<WeatherInfoDto>(),
+                    Forecasts = alert.City.Forecasts ?? new List<ForecastDto>(),
+                    Alerts = alert.City.Alerts ?? new List<AlertDto>()
+                }
+            };
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private async Task HandleValidSubmitEdit()
+    {
+        apiErrors.Clear();
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/Alerts/{editingAlert.Id}", editingAlert);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Alerta actualizada exitosamente.";
+                errorMessage = null;
+                editingAlert = null;
+                await FetchAlerts();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                if (errorResponse != null && errorResponse.Errors != null)
+                {
+                    apiErrors.AddRange(errorResponse.Errors);
+                }
+                else
+                {
+                    errorMessage = "Error al actualizar la alerta.";
+                }
+                successMessage = null;
+            }
+            else
+            {
+                var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Error al actualizar la alerta: {errorMessageResponse}";
+                successMessage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al actualizar alerta: {ex.Message}");
+            errorMessage = "Error al actualizar la alerta.";
+            successMessage = null;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingAlert = null;
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private async Task DeleteAlert(int id)
+    {
+        bool confirm = await JsRuntime.InvokeAsync<bool>("confirm", "¿Estás seguro de que deseas eliminar esta alerta?");
+        if (confirm)
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/Alerts/{id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    successMessage = "Alerta eliminada correctamente.";
+                    errorMessage = null;
+                    alerts.RemoveAll(a => a.Id == id);
+                    StateHasChanged();
+                }
+                else
+                {
+                    var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                    errorMessage = $"Error al eliminar la alerta: {errorMessageResponse}";
+                    successMessage = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error al eliminar alerta: {ex.Message}");
+                errorMessage = "Error al eliminar la alerta.";
+                successMessage = null;
+            }
+        }
+    }
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    public class ErrorResponse
+    {
+        public List<string> Errors { get; set; }
+    }
+}
+
+

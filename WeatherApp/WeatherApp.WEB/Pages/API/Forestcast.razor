@@ -1,0 +1,274 @@
+﻿@page "/forecasts"
+@using WeatherApp.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+
+@attribute [Authorize(Roles = "Admin,User")]
+
+<style>
+    .forecasts-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 40px auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    .form-section {
+        margin-bottom: 40px;
+        padding: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+
+        .form-section h4 {
+            margin-bottom: 20px;
+        }
+
+    .btn-space {
+        margin-right: 10px;
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+    }
+
+    .error-message {
+        color: #dc3545;
+        margin-top: 5px;
+        font-size: 0.875rem;
+    }
+
+    .api-errors {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="forecasts-container">
+    <button class="btn btn-secondary mb-4" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    <h3 class="mb-4">Gestión de Pronósticos</h3>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (apiErrors != null && apiErrors.Any())
+    {
+        <div class="alert alert-danger api-errors" role="alert">
+            <ul>
+                @foreach (var error in apiErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (isAdmin)
+    {
+        <div class="form-section">
+            <h4>Crear Nuevo Pronóstico</h4>
+            <EditForm Model="newForecast" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="date" class="form-label">Fecha</label>
+                    <InputDate id="date" class="form-control" @bind-Value="newForecast.Date" />
+                    <ValidationMessage For="@(() => newForecast.Date)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="temperature" class="form-label">Temperatura</label>
+                    <InputNumber id="temperature" class="form-control" @bind-Value="newForecast.Temperature" />
+                    <ValidationMessage For="@(() => newForecast.Temperature)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="humidity" class="form-label">Humedad</label>
+                    <InputNumber id="humidity" class="form-control" @bind-Value="newForecast.Humidity" />
+                    <ValidationMessage For="@(() => newForecast.Humidity)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="cityId" class="form-label">ID de la Ciudad</label>
+                    <InputNumber id="cityId" class="form-control" @bind-Value="newForecast.CityId" />
+                    <ValidationMessage For="@(() => newForecast.CityId)" />
+                </div>
+
+                <button type="submit" class="btn btn-primary">Crear</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="ResetNewForecast">Cancelar</button>
+            </EditForm>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (isLoading)
+        {
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        }
+        else if (forecasts == null || !forecasts.Any())
+        {
+            <div class="alert alert-info" role="alert">
+                No hay pronósticos disponibles.
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover">
+                <thead class="table-primary">
+                    <tr>
+                        <th>ID</th>
+                        <th>Fecha</th>
+                        <th>Temperatura</th>
+                        <th>Humedad</th>
+                        <th>ID de la Ciudad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var forecast in forecasts)
+                    {
+                        <tr>
+                            <td>@forecast.Id</td>
+                            <td>@forecast.Date.ToString("yyyy-MM-dd")</td>
+                            <td>@forecast.Temperature</td>
+                            <td>@forecast.Humidity</td>
+                            <td>@forecast.CityId</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ForecastDto> forecasts = new();
+    private bool isAdmin = false;
+    private bool isLoading = true;
+
+    private ForecastDto newForecast = new();
+
+    private string successMessage;
+    private string errorMessage;
+    private List<string> apiErrors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            isAdmin = user.IsInRole("Admin");
+        }
+
+        newForecast.Date = DateTime.Today; // Inicializar la fecha de newForecast al día de hoy
+        await FetchForecasts();
+    }
+
+    private async Task FetchForecasts()
+    {
+        try
+        {
+            forecasts = await Http.GetFromJsonAsync<List<ForecastDto>>("api/Forecasts");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al obtener pronósticos: {ex.Message}");
+            errorMessage = "Error al cargar los pronósticos.";
+            successMessage = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        apiErrors.Clear();
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/Forecasts", newForecast);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Pronóstico creado exitosamente.";
+                errorMessage = null;
+                ResetNewForecast(); // Restablecer newForecast después de crear el pronóstico
+                await FetchForecasts();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                if (errorResponse != null && errorResponse.Errors != null)
+                {
+                    apiErrors.AddRange(errorResponse.Errors);
+                }
+                else
+                {
+                    errorMessage = "Error al crear el pronóstico.";
+                }
+                successMessage = null;
+            }
+            else
+            {
+                var errorMessageResponse = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Error al crear el pronóstico: {errorMessageResponse}";
+                successMessage = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error al crear pronóstico: {ex.Message}");
+            errorMessage = "Error al crear el pronóstico.";
+            successMessage = null;
+        }
+    }
+
+    private void ResetNewForecast()
+    {
+        newForecast = new ForecastDto { Date = DateTime.Today }; // Restablecer la fecha de newForecast al día de hoy
+        successMessage = null;
+        errorMessage = null;
+        apiErrors.Clear();
+    }
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    public class ErrorResponse
+    {
+        public List<string> Errors { get; set; }
+    }
+}

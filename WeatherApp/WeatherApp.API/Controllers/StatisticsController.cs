@@ -20,26 +20,44 @@ namespace WeatherApp.API.Controllers
         [HttpGet("City/{cityId}/Statistics")]
         public async Task<IActionResult> GetWeatherStatistics(int cityId, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {
-            var query = _context.WeatherInfos.Where(w => w.CityId == cityId);
-
-            if (startDate.HasValue)
-                query = query.Where(w => w.SunInfo.Sunrise >= startDate.Value);
-
-            if (endDate.HasValue)
-                query = query.Where(w => w.SunInfo.Sunset <= endDate.Value);
-
-            var stats = new
+            try
             {
-                AvgTemperature = await query.AverageAsync(w => w.Temperature),
-                AvgHumidity = await query.AverageAsync(w => w.Humidity),
-                PredominantWind = await query
+                var query = _context.WeatherInfos.Where(w => w.CityId == cityId);
+
+                if (startDate.HasValue)
+                    query = query.Where(w => w.SunInfo.Sunrise >= startDate.Value);
+
+                if (endDate.HasValue)
+                    query = query.Where(w => w.SunInfo.Sunset <= endDate.Value);
+
+                if (!await query.AnyAsync())
+                {
+                    return NotFound("No weather data found for the specified city and date range.");
+                }
+
+                var avgTemperature = await query.AverageAsync(w => (double?)w.Temperature) ?? 0.0;
+                var avgHumidity = await query.AverageAsync(w => (double?)w.Humidity) ?? 0.0;
+                var predominantWind = await query
                     .GroupBy(w => w.Wind.Direction)
                     .OrderByDescending(g => g.Count())
-                    .Select(g => g.Key)
-                    .FirstOrDefaultAsync()
-            };
+                    .Select(g => (double?)g.Key)
+                    .FirstOrDefaultAsync() ?? 0.0;
 
-            return Ok(stats); // Retornar los datos como respuesta
+                var stats = new
+                {
+                    AvgTemperature = avgTemperature,
+                    AvgHumidity = avgHumidity,
+                    PredominantWind = predominantWind
+                };
+
+                return Ok(stats); // Retornar los datos como respuesta
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (you can use a logging framework here)
+                Console.Error.WriteLine($"Error retrieving weather statistics: {ex.Message}");
+                return StatusCode(500, "An error occurred while retrieving weather statistics.");
+            }
         }
     }
 }

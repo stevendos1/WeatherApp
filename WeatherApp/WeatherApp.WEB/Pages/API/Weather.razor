@@ -1,0 +1,549 @@
+﻿@page "/weather"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+
+@attribute [Authorize]
+
+<style>
+    /* Contenedor principal */
+    .weather-container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    /* Encabezado */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+        .header h1 {
+            font-size: 2em;
+            color: #333;
+        }
+
+    .back-button {
+        padding: 10px 20px;
+        background-color: #007bff;
+        border: none;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+        .back-button:hover {
+            background-color: #0056b3;
+        }
+
+    /* Selección de Ciudad y Coordenadas */
+    .city-selector,
+    .coordinates-input {
+        margin-bottom: 20px;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .city-selector label,
+        .coordinates-input label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .city-selector select,
+        .coordinates-input input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+
+        .city-selector button,
+        .coordinates-input button {
+            align-self: flex-start;
+            padding: 10px 20px;
+            background-color: #28a745;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+            .city-selector button:hover,
+            .coordinates-input button:hover {
+                background-color: #218838;
+            }
+
+    /* Información del Clima */
+    .weather-info {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+    }
+
+        .weather-info h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .weather-info p {
+            margin: 5px 0;
+            color: #555;
+            line-height: 1.6;
+        }
+
+        .weather-info strong {
+            color: #333;
+        }
+
+    /* Historial del Clima */
+    .weather-history {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+    }
+
+        .weather-history h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .weather-history table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .weather-history th,
+        .weather-history td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .weather-history th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+
+        .weather-history tr:hover {
+            background-color: #f1f1f1;
+        }
+
+    /* Acciones de Administrador */
+    .admin-actions {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+    }
+
+        .admin-actions h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .admin-actions button {
+            padding: 10px 20px;
+            background-color: #ffc107;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+            .admin-actions button:hover {
+                background-color: #e0a800;
+            }
+
+    /* Mensaje de Error */
+    .error-message {
+        padding: 15px;
+        background-color: #f8d7da;
+        color: #721c24;
+        border-left: 4px solid #f5c6cb;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+
+    /* Responsividad */
+    @@media (max-width: 600px) { /* Corrección de @@media a @@media
+        */ .header
+
+    {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .back-button {
+        margin-top: 10px;
+        width: 100%;
+    }
+
+    .city-selector,
+    .coordinates-input {
+        flex-direction: column;
+    }
+
+        .city-selector button,
+        .coordinates-input button {
+            width: 100%;
+        }
+
+    }
+</style>
+
+<div class="weather-container">
+    <div class="header">
+        <h1>Información del Clima</h1>
+        <button class="back-button" @onclick="NavigateToDashboard">Volver al Dashboard</button>
+    </div>
+
+    <!-- Selección de Ciudad -->
+    <div class="city-selector">
+        <label>Selecciona una ciudad:</label>
+        <!-- Eliminado @onchange="OnCitySelected" para evitar atributos duplicados -->
+        <select @bind="selectedCity">
+            <option value="">--Selecciona una ciudad--</option>
+            @foreach (var city in cities)
+            {
+                <option value="@city.Name">@city.Name</option>
+            }
+        </select>
+        <button @onclick="GetWeatherByCity">Obtener Clima</button>
+    </div>
+
+    <!-- Entrada de Latitud y Longitud -->
+    <div class="coordinates-input">
+        <label>Latitud (-90 a 90):</label>
+        <input type="number" @bind="latitude" step="0.0001" min="-90" max="90" />
+        <label>Longitud (-180 a 180):</label>
+        <input type="number" @bind="longitude" step="0.0001" min="-180" max="180" />
+        <button @onclick="GetWeatherByCoordinates">Obtener Clima por Coordenadas</button>
+    </div>
+
+    <!-- Información del Clima -->
+    @if (weatherInfo != null)
+    {
+        <div class="weather-info">
+            <h2>Detalles del Clima en @weatherInfo.CityName</h2>
+            <p><strong>Temperatura:</strong> @weatherInfo.Temperature °C</p>
+            <p><strong>Humedad:</strong> @weatherInfo.Humidity %</p>
+            <p><strong>Presión:</strong> @weatherInfo.Pressure hPa</p>
+            <p><strong>Descripción:</strong> @weatherInfo.Description</p>
+            @if (weatherInfo.Wind != null)
+            {
+                <p><strong>Velocidad del Viento:</strong> @weatherInfo.Wind.Speed km/h</p>
+                <p><strong>Dirección del Viento:</strong> @weatherInfo.Wind.Direction</p>
+            }
+            @if (weatherInfo.CloudCoverage != null)
+            {
+                <p><strong>Nubosidad:</strong> @weatherInfo.CloudCoverage.Percentage %</p>
+            }
+            @if (weatherInfo.SunInfo != null)
+            {
+                <p><strong>Amanecer:</strong> @weatherInfo.SunInfo.Sunrise.ToLocalTime()</p>
+                <p><strong>Atardecer:</strong> @weatherInfo.SunInfo.Sunset.ToLocalTime()</p>
+            }
+            @if (weatherInfo.TemperatureDetails != null)
+            {
+                <p><strong>Temperatura Mínima:</strong> @weatherInfo.TemperatureDetails.Min °C</p>
+                <p><strong>Temperatura Máxima:</strong> @weatherInfo.TemperatureDetails.Max °C</p>
+            }
+        </div>
+    }
+
+    <!-- Historial del Clima -->
+    @if (weatherHistory != null && weatherHistory.Any())
+    {
+        <div class="weather-history">
+            <h2>Historial del Clima en @selectedCity</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Temperatura</th>
+                        <th>Humedad</th>
+                        <th>Presión</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var info in weatherHistory)
+                    {
+                        <tr>
+                            <td>@info.Date.ToLocalTime()</td>
+                            <td>@info.Temperature °C</td>
+                            <td>@info.Humidity %</td>
+                            <td>@info.Pressure hPa</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <!-- Acciones de Administrador -->
+    @if (isAdmin)
+    {
+        <div class="admin-actions">
+            <h3>Acciones Administrativas</h3>
+            <button @onclick="SyncWeatherData">Sincronizar Datos del Clima</button>
+        </div>
+    }
+
+    <!-- Mensaje de Error -->
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-message">@errorMessage</div>
+    }
+</div>
+
+@code {
+    private List<CityInfo> cities = new List<CityInfo>
+    {
+        new CityInfo { Id = 1, Name = "New York", Latitude = 40.7128, Longitude = -74.0060 },
+        new CityInfo { Id = 2, Name = "London", Latitude = 51.5074, Longitude = -0.1278 },
+        new CityInfo { Id = 3, Name = "Tokyo", Latitude = 35.6895, Longitude = 139.6917 },
+        new CityInfo { Id = 4, Name = "Sydney", Latitude = -33.8688, Longitude = 151.2093 },
+        new CityInfo { Id = 5, Name = "Bogotá", Latitude = 4.7110, Longitude = -74.0721 },
+        new CityInfo { Id = 6, Name = "Medellín", Latitude = 6.2442, Longitude = -75.5812 },
+        new CityInfo { Id = 7, Name = "Cali", Latitude = 3.4516, Longitude = -76.5320 },
+        new CityInfo { Id = 8, Name = "Barranquilla", Latitude = 10.9685, Longitude = -74.7813 },
+        new CityInfo { Id = 9, Name = "Cartagena", Latitude = 10.3910, Longitude = -75.4794 }
+    };
+
+    private string _selectedCity;
+    private string selectedCity
+    {
+        get => _selectedCity;
+        set
+        {
+            if (_selectedCity != value)
+            {
+                _selectedCity = value;
+                OnCitySelected(); // Llamar al método cuando se cambia la ciudad
+            }
+        }
+    }
+
+    private WeatherInfoDto weatherInfo;
+    private List<WeatherInfoDto> weatherHistory;
+    private string errorMessage;
+    private double latitude;
+    private double longitude;
+    private bool isAdmin;
+
+    private string userName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        isAdmin = user.IsInRole("Admin");
+
+        if (!user.Identity.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("/login");
+        }
+        else
+        {
+            userName = user.Identity.Name ?? "Usuario";
+        }
+
+        await FetchCoordinates();
+    }
+
+    private async Task GetWeatherByCity()
+    {
+        errorMessage = string.Empty;
+        weatherInfo = null;
+        weatherHistory = null;
+
+        if (string.IsNullOrEmpty(selectedCity))
+        {
+            errorMessage = "Por favor, selecciona una ciudad.";
+            return;
+        }
+
+        // Obtener la ciudad seleccionada para obtener sus coordenadas
+        var city = cities.FirstOrDefault(c => c.Name == selectedCity);
+        if (city == null)
+        {
+            errorMessage = "Ciudad seleccionada no encontrada.";
+            return;
+        }
+
+        latitude = city.Latitude;
+        longitude = city.Longitude;
+
+        try
+        {
+            var response = await Http.GetAsync($"api/weatherinfo?lat={latitude}&lon={longitude}");
+            if (response.IsSuccessStatusCode)
+            {
+                weatherInfo = await response.Content.ReadFromJsonAsync<WeatherInfoDto>();
+
+                // Obtener el ID de la ciudad
+                await GetWeatherHistoryByCityId(city.Id);
+            }
+            else
+            {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al obtener los datos del clima: {ex.Message}";
+        }
+    }
+
+    private async Task GetWeatherByCoordinates()
+    {
+        errorMessage = string.Empty;
+        weatherInfo = null;
+        weatherHistory = null;
+
+        if (!IsValidLatitude(latitude) || !IsValidLongitude(longitude))
+        {
+            errorMessage = "La latitud debe estar entre -90 y 90, y la longitud entre -180 y 180.";
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetAsync($"api/weatherinfo?lat={latitude}&lon={longitude}");
+            if (response.IsSuccessStatusCode)
+            {
+                weatherInfo = await response.Content.ReadFromJsonAsync<WeatherInfoDto>();
+                selectedCity = weatherInfo.CityName;
+
+                // Obtener el ID de la ciudad
+                var city = cities.FirstOrDefault(c => c.Name == selectedCity);
+                if (city != null)
+                {
+                    await GetWeatherHistoryByCityId(city.Id);
+                }
+            }
+            else
+            {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al obtener los datos del clima: {ex.Message}";
+        }
+    }
+
+    private async Task FetchCoordinates()
+    {
+        // Este método puede ser utilizado para obtener coordenadas si es necesario
+        // Actualmente, no se está llamando en el componente original
+    }
+
+    private async Task GetWeatherHistoryByCityId(int cityId)
+    {
+        try
+        {
+            var response = await Http.GetAsync($"api/weatherhistory/city/{cityId}");
+            if (response.IsSuccessStatusCode)
+            {
+                weatherHistory = await response.Content.ReadFromJsonAsync<List<WeatherInfoDto>>();
+            }
+            else
+            {
+                // Si no hay historial, no mostrar error
+                weatherHistory = new List<WeatherInfoDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al obtener el historial del clima: {ex.Message}";
+        }
+    }
+
+    private async Task SyncWeatherData()
+    {
+        if (!isAdmin)
+        {
+            errorMessage = "No tienes permiso para realizar esta acción.";
+            return;
+        }
+
+        if (!IsValidLatitude(latitude) || !IsValidLongitude(longitude))
+        {
+            errorMessage = "La latitud debe estar entre -90 y 90, y la longitud entre -180 y 180.";
+            return;
+        }
+
+        try
+        {
+            var response = await Http.PostAsync($"api/weather/sync?lat={latitude}&lon={longitude}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                await GetWeatherByCoordinates();
+            }
+            else
+            {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al sincronizar los datos del clima: {ex.Message}";
+        }
+    }
+
+    private bool IsValidLatitude(double lat) => lat >= -90 && lat <= 90;
+    private bool IsValidLongitude(double lon) => lon >= -180 && lon <= 180;
+
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+
+    // Método para manejar la selección de ciudad y asignar las coordenadas automáticamente
+    private void OnCitySelected()
+    {
+        var city = cities.FirstOrDefault(c => c.Name == selectedCity);
+        if (city != null)
+        {
+            latitude = city.Latitude;
+            longitude = city.Longitude;
+        }
+    }
+
+    // Clase para almacenar información de la ciudad
+    public class CityInfo
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    // Clase para manejar respuestas de error (opcional, si se usa)
+    public class ErrorResponse
+    {
+        public List<string> Errors { get; set; }
+    }
+}

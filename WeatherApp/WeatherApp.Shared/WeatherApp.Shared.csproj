@@ -13,8 +13,4 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\WeatherApp.WEB\WeatherApp.WEB.csproj" />
-  </ItemGroup>
-
 </Project>

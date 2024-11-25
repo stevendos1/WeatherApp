@@ -12,4 +12,6 @@ public class AlertDto
     public string Title { get; set; }
     public string Description { get; set; }
     public DateTime Date { get; set; }
+    public int CityId { get; set; }
+    public CityDto City { get; set; }
 }

@@ -6,6 +6,15 @@
 
     public class City
     {
+        public City()
+        {
+            Coordinates = new Coordinates();
+            Forecasts = new List<Forecast>();
+            WeatherHistory = new List<WeatherInfo>();
+            Alerts = new List<Alert>();
+            Users = new List<User>();
+        }
+
         [Key]
         public int Id { get; set; }
 
@@ -17,13 +26,12 @@
         [MaxLength(50)]
         public string Country { get; set; }
 
-        public Coordinates Coordinates { get; set; } = new Coordinates(); // Inicialización por defecto
+        public Coordinates Coordinates { get; set; }
 
-        // Propiedades para leer y asignar latitud
         [NotMapped]
         public double Latitude
         {
-            get => Coordinates?.Latitude ?? 0; // Retorna 0 si Coordinates es null
+            get => Coordinates?.Latitude ?? 0;
             set
             {
                 if (Coordinates == null)
@@ -32,11 +40,10 @@
             }
         }
 
-        // Propiedades para leer y asignar longitud
         [NotMapped]
         public double Longitude
         {
-            get => Coordinates?.Longitude ?? 0; // Retorna 0 si Coordinates es null
+            get => Coordinates?.Longitude ?? 0;
             set
             {
                 if (Coordinates == null)
@@ -45,9 +52,9 @@
             }
         }
 
-        public List<Forecast> Forecasts { get; set; } = new List<Forecast>();
-        public List<WeatherInfo> WeatherHistory { get; set; } = new List<WeatherInfo>();
-        public List<Alert> Alerts { get; set; } = new List<Alert>();
-        public List<User> Users { get; set; } = new List<User>();
+        public List<Forecast> Forecasts { get; set; }
+        public List<WeatherInfo> WeatherHistory { get; set; }
+        public List<Alert> Alerts { get; set; }
+        public List<User> Users { get; set; }
     }
 }
